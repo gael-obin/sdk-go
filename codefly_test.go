@@ -494,3 +494,29 @@ func requireNoError(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+func TestExternalLocationCannotUseLocalNativeAddress(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	t.Setenv("CODEFLY__ENVIRONMENT", "")
+	requireNoError(t, codefly.LoadEnvironmentVariables())
+	writeFile(t, filepath.Join(root, "workspace.codefly.yaml"), "name: location-test\nlayout: modules\nmodules:\n  - name: platform\n")
+	writeFile(t, filepath.Join(root, "modules/platform/module.codefly.yaml"), "kind: module\nname: platform\nservices:\n  - name: records\n")
+	writeFile(t, filepath.Join(root, "modules/platform/services/records/service.codefly.yaml"), `kind: service
+name: records
+version: 0.0.0
+agent:
+  kind: codefly:service
+  name: rust
+  version: 0.0.20
+  publisher: codefly.dev
+endpoints:
+  - name: rest
+    visibility: public
+    location: external
+`)
+	t.Chdir(root)
+	instance, err := codefly.For(ctx).Module("platform").Service("records").Endpoint("rest").ResolveNetworkInstance()
+	assert.Nil(t, instance)
+	assert.ErrorContains(t, err, "external endpoint cannot be resolved from the local native map")
+}
